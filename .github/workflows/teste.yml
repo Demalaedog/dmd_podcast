@@ -1,0 +1,15 @@
+name: Workflow de Teste
+
+on:
+  workflow_dispatch:  # permite rodar manualmente
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      - name: Teste simples
+        run: echo "Hello Actions! O GitHub Actions está funcionando."
