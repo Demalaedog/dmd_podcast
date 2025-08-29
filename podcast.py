@@ -1,103 +1,104 @@
+# podcast.py
 import os
-import uuid
-import time
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+import openai
+from elevenlabs import generate, set_api_key, save
+import textwrap
 
-# TTS e IA
-try:
-    import openai
-    from elevenlabs import generate, save, set_api_key as eleven_set_api_key
-except ImportError:
-    openai = None
-    generate = None
-    save = None
-    eleven_set_api_key = None
+# Configurações via ambiente
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+VOICE_A = os.getenv("VOICE_A", "paulistano_masculino")
+VOICE_B = os.getenv("VOICE_B", "paulistano_feminino")
+SAIDA_DIR = Path(os.getenv("SAIDA_DIR", "./saida/public"))
 
-# RSS
-import xml.etree.ElementTree as ET
+set_api_key(ELEVENLABS_API_KEY)
+openai.api_key = OPENAI_API_KEY
 
-# Configurações
-SAIDA_DIR = Path(os.getenv('SAIDA_DIR', './saida/public'))
+# Garantir que a pasta de saída existe
 SAIDA_DIR.mkdir(parents=True, exist_ok=True)
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
-VOICE_A = os.getenv('VOICE_A', 'paulistano_masculino')
-VOICE_B = os.getenv('VOICE_B', 'paulistano_feminino')
-MODEL_OPENAI = os.getenv('MODEL_OPENAI', 'gpt-4o-mini')
-ELEVEN_MODEL = os.getenv('ELEVEN_MODEL', 'eleven_monolingual_v1')
-
-INTRO_APRESENTADORES = (
-    'Fala viajante! Eu sou o Renan, e comigo está a Fernanda. '
-    'Bem-vindo(a) ao De Mala e Dog News — Espanha para Brasileiros.'
-)
-
-# Inicializar APIs
-if openai and OPENAI_API_KEY:
-    openai.api_key = OPENAI_API_KEY
-if eleven_set_api_key and ELEVENLABS_API_KEY:
-    eleven_set_api_key(ELEVENLABS_API_KEY)
-
-# Função para gerar roteiro
 def gerar_roteiro():
-    prompt = f"""
-Crie um roteiro de podcast em formato de DIÁLOGO entre dois apresentadores paulistanos.
-Comece com: {INTRO_APRESENTADORES}
+    """
+    Gera um roteiro de até 5 minutos de notícias e curiosidades da Espanha para brasileiros
+    """
+    prompt = textwrap.dedent(f"""
+    Você é um apresentador de podcast chamado "De Mala e Dog News — Espanha para Brasileiros".
+    Crie um roteiro de conversa entre dois apresentadores: Renan (homem) e Fernanda (mulher), ambos com sotaque paulistano.
+    O episódio deve ter aproximadamente 5 minutos.
+    Inclua:
+      - Notícias sobre imigração e documentações
+      - Dicas de viagens e destinos na Espanha
+      - Curiosidades culturais e gastronômicas
+    Inicie com "Fala viajante!"
+    Formate como diálogo, exemplo:
+      Renan: ...
+      Fernanda: ...
+    """
+    )
+    
+    response = openai.ChatCompletion.create(
+        model=os.getenv("MODEL_OPENAI", "gpt-4o-mini"),
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
+    )
+    
+    roteiro = response.choices[0].message.content.strip()
+    return roteiro
 
-- Limite o texto a aproximadamente 800 palavras (até 5 minutos de áudio).
-- Traga 4 blocos: Imigração/Documentação, Destinos/Viagens, Cultura/Gastronomia, Eventos/Agenda.
-- Use linguagem clara e estilo de conversa.
-"""
-    if openai:
-        resposta = openai.ChatCompletion.create(
-            model=MODEL_OPENAI,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return resposta.choices[0].message.content
-    else:
-        return f"{INTRO_APRESENTADORES} Aqui seria o roteiro de teste de até 5 minutos."
-
-# Função para gerar áudio TTS
 def gerar_audio(texto, arquivo_saida):
-    if generate and save:
-        audio = generate(texto, voice=VOICE_A, model=ELEVEN_MODEL)
-        save(audio, arquivo_saida)
-        return True
-    else:
-        with open(arquivo_saida.replace('.mp3', '.txt'), 'w') as f:
-            f.write(texto)
-        return False
+    """
+    Gera o áudio a partir do texto usando ElevenLabs e salva roteiro em .txt
+    """
+    # Salvar roteiro em .txt
+    arquivo_txt = Path(arquivo_saida).with_suffix('.txt')
+    with open(arquivo_txt, 'w') as f:
+        f.write(texto)
+    
+    # Dividir o roteiro para respeitar limite de tempo (~5 min)
+    # Assumindo ~150 palavras por minuto, limitamos a 750 palavras
+    palavras = texto.split()
+    palavras = palavras[:750]
+    texto_limitado = " ".join(palavras)
 
-# Criar RSS básico
-def gerar_rss(arquivo_audio, titulo='Episódio', resumo='Resumo do episódio'):
-    feed_path = SAIDA_DIR / 'feed.xml'
-    item_guid = str(uuid.uuid4())
+    # Criar áudio (simulação de conversa: alterna vozes)
+    linhas = texto_limitado.splitlines()
+    audio_final = None
 
-    if feed_path.exists():
-        tree = ET.parse(feed_path)
-        root = tree.getroot()
-    else:
-        root = ET.Element('rss', version='2.0')
-        channel = ET.SubElement(root, 'channel')
-        ET.SubElement(channel, 'title').text = 'De Mala e Dog News — Espanha para Brasileiros'
-        ET.SubElement(channel, 'link').text = ''
-        ET.SubElement(channel, 'description').text = 'Podcast sobre Espanha para brasileiros.'
-        tree = ET.ElementTree(root)
+    for linha in linhas:
+        if linha.strip().startswith("Renan:"):
+            voz = VOICE_A
+            conteudo = linha.replace("Renan:", "").strip()
+        elif linha.strip().startswith("Fernanda:"):
+            voz = VOICE_B
+            conteudo = linha.replace("Fernanda:", "").strip()
+        else:
+            # Linha neutra, usa voz A
+            voz = VOICE_A
+            conteudo = linha.strip()
 
-    channel = root.find('channel')
-    item = ET.SubElement(channel, 'item')
-    ET.SubElement(item, 'title').text = titulo
-    ET.SubElement(item, 'description').text = resumo
-    ET.SubElement(item, 'guid').text = item_guid
-    ET.SubElement(item, 'enclosure', url=f"{os.getenv('PODCAST_AUDIO_BASE_URL')}{arquivo_audio.name}", type='audio/mpeg')
-    ET.SubElement(item, 'pubDate').text = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+        audio = generate(text=conteudo, voice=voz, model=os.getenv("ELEVEN_MODEL", "eleven_monolingual_v1"))
+        if audio_final is None:
+            audio_final = audio
+        else:
+            audio_final += audio
 
-    tree.write(feed_path, encoding='utf-8', xml_declaration=True)
+    # Salvar arquivo de áudio
+    save(audio_final, str(arquivo_saida))
 
-# ======== Execução ========
-roteiro = gerar_roteiro()
-arquivo_audio = SAIDA_DIR / f"episodio_{int(time.time())}.mp3"
-gerar_audio(roteiro, arquivo_audio)
-gerar_rss(arquivo_audio, titulo=f'Episódio {datetime.now().strftime("%d/%m/%Y")}', resumo='Resumo do episódio')
-print(f'Episódio gerado: {arquivo_audio}')
+def main():
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    arquivo_audio = SAIDA_DIR / f"episodio_{now}.mp3"
+    
+    print("Gerando roteiro...")
+    roteiro = gerar_roteiro()
+    
+    print("Gerando áudio...")
+    gerar_audio(roteiro, arquivo_audio)
+    
+    print(f"Episódio gerado: {arquivo_audio}")
+    print("Roteiro salvo em .txt correspondente")
+
+if __name__ == "__main__":
+    main()
