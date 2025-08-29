@@ -1,4 +1,4 @@
-# Arquivo: .github/workflows/podcast.yml
+edo# Arquivo: .github/workflows/podcast.yml
 # Workflow para rodar o podcast automático no GitHub Actions
 
 name: Podcast Diário Automatizado
@@ -44,6 +44,6 @@ jobs:
           PODCAST_AUTHOR: 'De Mala e Dog'
           PODCAST_SUMMARY: 'Notícias, dicas e curiosidades da Espanha para brasileiros, em formato de bate-papo.'
           PODCAST_FEED_PATH: ./saida/public/feed.xml
-          PODCAST_AUDIO_BASE_URL: 'https://raw.githubusercontent.com/<SEU_USUARIO>/<SEU_REPO>/main/saida/public/'
+          PODCAST_AUDIO_BASE_URL: 'https://raw.githubusercontent.com/Demaledog/dmd_podcast/main/saida/public/'
         run: |
           python podcast.py
